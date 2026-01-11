@@ -12,6 +12,6 @@ Route::view('/home', 'app')->name('home');
 
 /**
  * Catch-all SPA (React Router)
- * Deixe sempre por ÚLTIMO.
+ * Deixe sempre por ÚLTIMO. CIRO NETO
  */
 Route::view('/{any}', 'app')->where('any', '.*')->name('app');
