@@ -16,8 +16,18 @@ function IconPlane({ className = "" }) {
 function IconHotel({ className = "" }) {
   return (
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M8 20v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path
+        d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 20v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
       <path d="M8 8h.01M12 8h.01M16 8h.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   )
@@ -37,7 +47,11 @@ function IconCalendar({ className = "" }) {
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M7 3v2M17 3v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M4 8h16" stroke="currentColor" strokeWidth="2" />
-      <path d="M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
     </svg>
   )
 }
@@ -112,6 +126,360 @@ function SuggestList({ items = [], onPick, header, onBack, emptyText = "Nada enc
   )
 }
 
+/* ===== DATEPICKER (custom) ===== */
+const MONTHS_PT = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+]
+const WEEK_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+function pad2(n) {
+  return String(n).padStart(2, "0")
+}
+function isoToBR(iso) {
+  if (!iso) return ""
+  const [y, m, d] = iso.split("-")
+  if (!y || !m || !d) return ""
+  return `${d}/${m}/${y}`
+}
+function toISODate(d) {
+  const y = d.getFullYear()
+  const m = pad2(d.getMonth() + 1)
+  const day = pad2(d.getDate())
+  return `${y}-${m}-${day}`
+}
+function startOfMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+function addMonths(d, n) {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1)
+}
+function isSameDay(a, b) {
+  if (!a || !b) return false
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+function isBeforeDay(a, b) {
+  const aa = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime()
+  const bb = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime()
+  return aa < bb
+}
+
+function DatePickerField({ label, valueISO, onChangeISO, minISO, placeholder = "Selecionar" }) {
+  const rootRef = useRef(null)
+  const [open, setOpen] = useState(false)
+
+  const minDate = useMemo(() => {
+    if (!minISO) return null
+    const [y, m, d] = minISO.split("-").map((x) => parseInt(x, 10))
+    if (!y || !m || !d) return null
+    return new Date(y, m - 1, d)
+  }, [minISO])
+
+  const selectedDate = useMemo(() => {
+    if (!valueISO) return null
+    const [y, m, d] = valueISO.split("-").map((x) => parseInt(x, 10))
+    if (!y || !m || !d) return null
+    return new Date(y, m - 1, d)
+  }, [valueISO])
+
+  const [view, setView] = useState(() => startOfMonth(selectedDate || new Date()))
+
+  // quando abre, alinha o mês com a data selecionada (se existir)
+  useEffect(() => {
+    if (open) setView(startOfMonth(selectedDate || new Date()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  useEffect(() => {
+    const onDown = (e) => {
+      const t = e.target
+      if (rootRef.current && !rootRef.current.contains(t)) setOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [])
+
+  const grid = useMemo(() => {
+    const first = startOfMonth(view)
+    const firstWeekday = (first.getDay() + 6) % 7 // 0=Seg ... 6=Dom
+    const start = new Date(first)
+    start.setDate(first.getDate() - firstWeekday)
+
+    const days = []
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      days.push(d)
+    }
+    return days
+  }, [view])
+
+  const pick = (d) => {
+    if (minDate && isBeforeDay(d, minDate)) return
+    onChangeISO(toISODate(d))
+    setOpen(false)
+  }
+
+  const display = valueISO ? isoToBR(valueISO) : ""
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <label className="block text-[#1B2F5B] text-[13px] mb-1">{label}</label>
+
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "h-14 w-full rounded-xl border border-slate-300 bg-white px-4",
+          "flex items-center justify-between text-left"
+        )}
+      >
+        <span className={cn("text-[16px]", display ? "text-[#1B2F5B]" : "text-slate-300")}>
+          {display || placeholder}
+        </span>
+        <IconCalendar className="opacity-40 shrink-0" />
+      </button>
+
+      {open && (
+        <div
+          className={cn(
+            "absolute left-0 top-[calc(100%+8px)] z-[9999]",
+            "w-[280px]",
+            "rounded-2xl border border-slate-200 bg-white",
+            "shadow-[0_10px_40px_rgba(0,0,0,0.12)] overflow-hidden"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setView((v) => addMonths(v, -1))}
+              className="h-8 w-8 rounded-full grid place-items-center hover:bg-slate-100 text-[#1B2F5B]"
+              aria-label="Mês anterior"
+            >
+              ‹
+            </button>
+
+            <div className="text-[15px] font-semibold text-[#1B2F5B]">
+              {MONTHS_PT[view.getMonth()]} {view.getFullYear()}
+            </div>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setView((v) => addMonths(v, 1))}
+              className="h-8 w-8 rounded-full grid place-items-center hover:bg-slate-100 text-[#1B2F5B]"
+              aria-label="Próximo mês"
+            >
+              ›
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="px-4 py-3">
+            <div className="grid grid-cols-7 gap-1 mb-2 text-[12px] text-slate-500 text-center font-medium">
+              {WEEK_PT.map((w) => (
+                <div key={w}>{w}</div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-[2px]">
+              {grid.map((d, idx) => {
+                const isCurrentMonth = d.getMonth() === view.getMonth()
+                const disabled = minDate ? isBeforeDay(d, minDate) : false
+                const selected = selectedDate ? isSameDay(d, selectedDate) : false
+
+                return (
+                  <button
+                    key={`${d.toISOString()}-${idx}`}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(d)}
+                    disabled={disabled}
+                    className={cn(
+                      "h-9 w-9 rounded-full text-[14px] flex items-center justify-center transition-colors",
+                      isCurrentMonth ? "text-[#1B2F5B]" : "text-slate-300",
+                      disabled && "opacity-40 cursor-not-allowed",
+                      !disabled && "hover:bg-slate-100",
+                      selected && "bg-[#00A8C6] text-white hover:bg-[#00A8C6]"
+                    )}
+                  >
+                    {d.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+
+            {valueISO && (
+              <div className="mt-3 flex justify-between items-center">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChangeISO("")
+                    setOpen(false)
+                  }}
+                  className="text-[13px] text-slate-500 hover:text-slate-700"
+                >
+                  Limpar
+                </button>
+
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setOpen(false)}
+                  className="text-[13px] font-semibold text-[#1B2F5B]"
+                >
+                  OK
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ===== PASSAGEIROS (Adultos/Crianças) ===== */
+function QtyButton({ onClick, disabled, children }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "h-9 w-9 rounded-full border border-slate-200 grid place-items-center",
+        disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-slate-50"
+      )}
+      aria-label={children === "+" ? "Aumentar" : "Diminuir"}
+    >
+      <span className="text-[18px] leading-none text-[#1B2F5B]">{children}</span>
+    </button>
+  )
+}
+
+function PassengerField({ adults, children, onChange }) {
+  const rootRef = useRef(null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const onDown = (e) => {
+      const t = e.target
+      if (rootRef.current && !rootRef.current.contains(t)) setOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [])
+
+  const total = (adults || 0) + (children || 0)
+  const label = `${total} ${total === 1 ? "passageiro" : "passageiros"}`
+
+  const setAdults = (next) => onChange({ adults: Math.max(1, next), children })
+  const setChildren = (next) => onChange({ adults, children: Math.max(0, next) })
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="h-14 w-full rounded-xl border-2 border-[#1B2F5B] bg-white px-5 flex items-center justify-between text-[#1B2F5B]"
+      >
+        <span className="text-[18px] font-medium">{label}</span>
+        <IconUser className="opacity-40" />
+      </button>
+
+      {open && (
+        <div
+          className={cn(
+            "absolute left-0 right-0 top-[calc(100%+8px)] z-[9999]",
+            "rounded-2xl border border-slate-200 bg-white",
+            "shadow-[0_14px_40px_rgba(0,0,0,0.14)] overflow-hidden"
+          )}
+        >
+          <div className="px-4 py-3 border-b border-slate-100">
+            <div className="text-[13px] font-semibold text-[#1B2F5B]">Passageiros</div>
+            <div className="text-[12px] text-slate-500 mt-0.5">Selecione adultos e crianças</div>
+          </div>
+
+          <div className="px-4 py-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[#1B2F5B]">Adultos</div>
+                <div className="text-[12px] text-slate-500">12+ anos</div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <QtyButton onClick={() => setAdults(adults - 1)} disabled={adults <= 1}>
+                  −
+                </QtyButton>
+                <div className="w-8 text-center text-[14px] font-semibold text-[#1B2F5B]">{adults}</div>
+                <QtyButton onClick={() => setAdults(adults + 1)} disabled={adults >= 9}>
+                  +
+                </QtyButton>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[#1B2F5B]">Crianças</div>
+                <div className="text-[12px] text-slate-500">2–11 anos</div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <QtyButton onClick={() => setChildren(children - 1)} disabled={children <= 0}>
+                  −
+                </QtyButton>
+                <div className="w-8 text-center text-[14px] font-semibold text-[#1B2F5B]">{children}</div>
+                <QtyButton onClick={() => setChildren(children + 1)} disabled={adults + children >= 9}>
+                  +
+                </QtyButton>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setOpen(false)}
+                className="h-10 px-4 rounded-full border border-slate-200 text-[#1B2F5B] text-[14px] font-semibold hover:bg-slate-50"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * GET /searchbox/options
  * Espera:
@@ -171,9 +539,13 @@ export default function SearchBoxDesktop() {
   const [destino, setDestino] = useState("")
   const [usarMilhas, setUsarMilhas] = useState(false)
 
-  // DATAS (agora com estado)
+  // DATAS (ISO)
   const [dataIda, setDataIda] = useState("")
   const [dataVolta, setDataVolta] = useState("")
+
+  // PASSAGEIROS
+  const [adults, setAdults] = useState(1)
+  const [children, setChildren] = useState(0)
 
   // dropdown open
   const [openField, setOpenField] = useState(null) // "origem" | "destino" | null
@@ -189,14 +561,26 @@ export default function SearchBoxDesktop() {
     if (!opt.loading) {
       setTab(opt.defaults.tab || "voos")
       setTripType(opt.defaults.tripType || "idaVolta")
+      const baseAdults = opt.defaults.passageiros || 1
+      setAdults(Math.max(1, baseAdults))
+      setChildren(0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opt.loading])
 
-  // se mudar pra "Só ida", limpa volta pra evitar enviar no payload
+  // se mudar pra "Só ida", limpa volta
   useEffect(() => {
     if (tripType === "soIda") setDataVolta("")
   }, [tripType])
+
+  // garante que volta não seja menor que ida
+  useEffect(() => {
+    if (tripType !== "idaVolta") return
+    if (!dataIda || !dataVolta) return
+    const ida = new Date(dataIda)
+    const volta = new Date(dataVolta)
+    if (volta.getTime() < ida.getTime()) setDataVolta("")
+  }, [dataIda, dataVolta, tripType])
 
   // ===== ORIGEM SUGGESTIONS (countries/cities) =====
   const origemCountrySuggestions = useMemo(() => {
@@ -216,7 +600,7 @@ export default function SearchBoxDesktop() {
     return normalized.filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(q)).slice(0, 12)
   }, [opt.citiesByCountry, selectedCountry, origem])
 
-  // ===== DESTINO (continua igual) =====
+  // ===== DESTINO =====
   const destinoSuggestions = useMemo(() => {
     const list = opt.destinations || []
     const q = destino.trim().toLowerCase()
@@ -258,12 +642,12 @@ export default function SearchBoxDesktop() {
       dataIda,
       ...(tripType === "idaVolta" ? { dataVolta } : {}),
       usarMilhas,
+      passageiros: { adults, children, total: adults + children },
     }
     console.log("SUBMIT DESKTOP:", payload)
     return payload
   }
 
-  // Ao abrir origem: sempre começa em países
   const openOrigem = () => {
     setOpenField("origem")
     setOrigemStep("country")
@@ -332,7 +716,7 @@ export default function SearchBoxDesktop() {
                   </Radio>
                 </div>
 
-                <div className="mt-5 grid grid-cols-12 gap-5 items-center">
+                <div className="mt-5 grid grid-cols-12 gap-5 items-end">
                   {/* Origem/Destino */}
                   <div className="col-span-12 lg:col-span-5">
                     <div className="relative h-14 rounded-xl border border-slate-300 bg-white flex">
@@ -480,42 +864,27 @@ export default function SearchBoxDesktop() {
                     </div>
                   </div>
 
-                  {/* Datas: Só ida = mostra só ida / Ida e volta = mostra ida + volta */}
+                  {/* Datas custom (alinhadas e proporcionais) */}
                   <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-                    <label className="block text-[#1B2F5B] text-[13px] mb-1">Data de ida</label>
-                    <div className="h-14 rounded-xl border border-slate-300 bg-white px-4 flex items-center justify-between">
-                      <input
-                        type="date"
-                        value={dataIda}
-                        onChange={(e) => setDataIda(e.target.value)}
-                        className="w-full text-[16px] text-[#1B2F5B] outline-none bg-transparent"
-                      />
-                      <IconCalendar className="opacity-40 shrink-0" />
-                    </div>
+                    <DatePickerField label="Data de ida" valueISO={dataIda} onChangeISO={setDataIda} minISO={null} placeholder="Selecionar" />
                   </div>
 
                   {tripType === "idaVolta" && (
                     <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-                      <label className="block text-[#1B2F5B] text-[13px] mb-1">Data de volta</label>
-                      <div className="h-14 rounded-xl border border-slate-300 bg-white px-4 flex items-center justify-between">
-                        <input
-                          type="date"
-                          value={dataVolta}
-                          onChange={(e) => setDataVolta(e.target.value)}
-                          min={dataIda || undefined}
-                          className="w-full text-[16px] text-[#1B2F5B] outline-none bg-transparent"
-                        />
-                        <IconCalendar className="opacity-40 shrink-0" />
-                      </div>
+                      <DatePickerField label="Data de volta" valueISO={dataVolta} onChangeISO={setDataVolta} minISO={dataIda || null} placeholder="Selecionar" />
                     </div>
                   )}
 
-                  {/* Passageiros */}
+                  {/* Passageiros (Adultos/Crianças) */}
                   <div className="col-span-12 lg:col-span-3">
-                    <div className="h-14 rounded-xl border-2 border-[#1B2F5B] bg-white px-5 flex items-center justify-between text-[#1B2F5B]">
-                      <span className="text-[18px] font-medium">{opt.defaults.passageiros || 1} passageiro</span>
-                      <IconUser className="opacity-40" />
-                    </div>
+                    <PassengerField
+                      adults={adults}
+                      children={children}
+                      onChange={({ adults: a, children: c }) => {
+                        setAdults(a)
+                        setChildren(c)
+                      }}
+                    />
                   </div>
                 </div>
 
