@@ -3,20 +3,31 @@ import React from "react"
 export default function ClubBanner() {
   return (
     <section className="bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="overflow-hidden rounded-2xl border">
-          <div className="grid items-center gap-4 bg-amber-400/90 p-6 lg:grid-cols-12">
-            <div className="lg:col-span-7">
-              <h2 className="text-2xl font-extrabold">Clube de vantagens</h2>
-              <p className="mt-1 text-sm">Economize em cada viagem</p>
-              <button className="mt-4 rounded-full bg-white px-5 py-3 text-sm font-extrabold">
-                Quero participar
-              </button>
-            </div>
-            <div className="lg:col-span-5">
-              {/* IMAGEM BANNER */}
-              <img src="/assets/club.jpg" alt="" className="rounded-2xl" />
-            </div>
+      <div className="mx-auto max-w-7xl px-4 py-10">
+        <div className="space-y-8">
+          {/* Banner grande (1.webp) */}
+          <img
+            src="/banner/1.webp"
+            alt=""
+            className="block w-full h-auto rounded-2xl select-none"
+            draggable={false}
+          />
+
+          {/* Dois banners (2.webp e 3.webp) */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <img
+              src="/banner/2.webp"
+              alt=""
+              className="block w-full h-auto rounded-2xl select-none"
+              draggable={false}
+            />
+
+            <img
+              src="/banner/3.webp"
+              alt=""
+              className="block w-full h-auto rounded-2xl select-none"
+              draggable={false}
+            />
           </div>
         </div>
       </div>
