@@ -1,8 +1,6 @@
-import React, { useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 
-function cn(...xs) {
-  return xs.filter(Boolean).join(" ")
-}
+const cn = (...x) => x.filter(Boolean).join(" ")
 
 /* ===== ÍCONES ===== */
 function IconPlane({ className = "" }) {
@@ -15,7 +13,6 @@ function IconPlane({ className = "" }) {
     </svg>
   )
 }
-
 function IconHotel({ className = "" }) {
   return (
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -25,7 +22,6 @@ function IconHotel({ className = "" }) {
     </svg>
   )
 }
-
 function IconBus({ className = "" }) {
   return (
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -36,7 +32,6 @@ function IconBus({ className = "" }) {
     </svg>
   )
 }
-
 function IconCalendar({ className = "" }) {
   return (
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -46,7 +41,6 @@ function IconCalendar({ className = "" }) {
     </svg>
   )
 }
-
 function IconUser({ className = "" }) {
   return (
     <svg className={cn("h-5 w-5", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -57,9 +51,9 @@ function IconUser({ className = "" }) {
 }
 
 /* ===== UI ===== */
-function Radio({ active, children }) {
+function Radio({ active, children, onClick }) {
   return (
-    <label className="inline-flex items-center gap-3 text-[#1B2F5B]">
+    <button type="button" onClick={onClick} className="inline-flex items-center gap-3 text-[#1B2F5B]">
       <span
         className={cn(
           "h-8 w-8 rounded-full border-[3px] border-[#1B2F5B] grid place-items-center",
@@ -67,17 +61,219 @@ function Radio({ active, children }) {
         )}
       />
       <span className="text-[20px]">{children}</span>
-    </label>
+    </button>
   )
 }
 
+function SuggestList({ items = [], onPick, header, onBack, emptyText = "Nada encontrado" }) {
+  return (
+    <div
+      className={cn(
+        "absolute left-0 right-0 top-[calc(100%+8px)] z-[9999]",
+        "rounded-2xl border border-slate-200 bg-white",
+        "shadow-[0_14px_40px_rgba(0,0,0,0.14)] overflow-hidden"
+      )}
+    >
+      {(header || onBack) && (
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="text-[13px] font-semibold text-[#1B2F5B]">{header || ""}</div>
+          {onBack && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onBack}
+              className="text-[13px] text-slate-500 hover:text-slate-700"
+            >
+              ← Voltar
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="max-h-[320px] overflow-auto">
+        {!items.length ? (
+          <div className="px-4 py-4 text-[13px] text-slate-500">{emptyText}</div>
+        ) : (
+          items.map((a) => (
+            <button
+              key={a.code}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(a)}
+              className="w-full text-left px-4 py-3 hover:bg-slate-50"
+            >
+              <div className="text-[14px] font-semibold text-[#1B2F5B]">{a.code}</div>
+              <div className="text-[13px] text-slate-500">{a.name}</div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * GET /searchbox/options
+ * Espera:
+ * { origins:[], destinations:[], countries:[], cities_by_country:{...}, default:{...} }
+ */
+function useSearchboxOptions() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const [origins, setOrigins] = useState([])
+  const [destinations, setDestinations] = useState([])
+
+  const [countries, setCountries] = useState([])
+  const [citiesByCountry, setCitiesByCountry] = useState({})
+
+  const [defaults, setDefaults] = useState({ tab: "voos", tripType: "idaVolta", passageiros: 1 })
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const res = await fetch("/searchbox/options", { headers: { Accept: "application/json" } })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+
+        setOrigins(Array.isArray(data?.origins) ? data.origins : [])
+        setDestinations(Array.isArray(data?.destinations) ? data.destinations : [])
+
+        setCountries(Array.isArray(data?.countries) ? data.countries.map((c) => ({ code: c.id, name: c.name })) : [])
+        setCitiesByCountry(typeof data?.cities_by_country === "object" && data?.cities_by_country ? data.cities_by_country : {})
+
+        setDefaults({
+          tab: data?.default?.tab || "voos",
+          tripType: data?.default?.tripType || "idaVolta",
+          passageiros: typeof data?.default?.passageiros === "number" ? data.default.passageiros : 1,
+        })
+      } catch (e) {
+        setError(e?.message || "Erro ao carregar options")
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  return { loading, error, origins, destinations, countries, citiesByCountry, defaults }
+}
+
 export default function SearchBoxDesktop() {
-  const [tab, setTab] = useState("voos") // voos | hoteis | realocacao
+  const opt = useSearchboxOptions()
+
+  const [tab, setTab] = useState("voos")
+
+  // VOOS
+  const [tripType, setTripType] = useState("idaVolta")
+  const [origem, setOrigem] = useState("")
+  const [destino, setDestino] = useState("")
+  const [usarMilhas, setUsarMilhas] = useState(false)
+
+  // DATAS (agora com estado)
+  const [dataIda, setDataIda] = useState("")
+  const [dataVolta, setDataVolta] = useState("")
+
+  // dropdown open
+  const [openField, setOpenField] = useState(null) // "origem" | "destino" | null
+
+  // ORIGEM: navegação país -> cidade
+  const [origemStep, setOrigemStep] = useState("country") // "country" | "city"
+  const [selectedCountry, setSelectedCountry] = useState(null)
+
+  const origemRootRef = useRef(null)
+  const destinoRootRef = useRef(null)
+
+  useEffect(() => {
+    if (!opt.loading) {
+      setTab(opt.defaults.tab || "voos")
+      setTripType(opt.defaults.tripType || "idaVolta")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opt.loading])
+
+  // se mudar pra "Só ida", limpa volta pra evitar enviar no payload
+  useEffect(() => {
+    if (tripType === "soIda") setDataVolta("")
+  }, [tripType])
+
+  // ===== ORIGEM SUGGESTIONS (countries/cities) =====
+  const origemCountrySuggestions = useMemo(() => {
+    const list = opt.countries || []
+    const q = origem.trim().toLowerCase()
+    if (!q) return list.slice(0, 12)
+    return list.filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(q)).slice(0, 12)
+  }, [opt.countries, origem])
+
+  const origemCitySuggestions = useMemo(() => {
+    const raw = selectedCountry ? opt.citiesByCountry?.[selectedCountry] : []
+    const list = Array.isArray(raw) ? raw : []
+    const normalized = list.map((x) => ({ code: x.code, name: x.name }))
+
+    const q = origem.trim().toLowerCase()
+    if (!q) return normalized.slice(0, 12)
+    return normalized.filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(q)).slice(0, 12)
+  }, [opt.citiesByCountry, selectedCountry, origem])
+
+  // ===== DESTINO (continua igual) =====
+  const destinoSuggestions = useMemo(() => {
+    const list = opt.destinations || []
+    const q = destino.trim().toLowerCase()
+    if (!q) return list.slice(0, 8)
+    return list.filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(q)).slice(0, 8)
+  }, [opt.destinations, destino])
+
+  // Fecha dropdown quando clicar fora / ESC
+  useEffect(() => {
+    const onDocDown = (e) => {
+      const t = e.target
+      const insideOrigem = origemRootRef.current && origemRootRef.current.contains(t)
+      const insideDestino = destinoRootRef.current && destinoRootRef.current.contains(t)
+      if (!insideOrigem && !insideDestino) setOpenField(null)
+    }
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpenField(null)
+    }
+    document.addEventListener("mousedown", onDocDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDocDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [])
+
+  const swap = () => {
+    setOrigem(destino)
+    setDestino(origem)
+    setOpenField(null)
+  }
+
+  const submit = () => {
+    const payload = {
+      tab,
+      tripType,
+      origem,
+      destino,
+      dataIda,
+      ...(tripType === "idaVolta" ? { dataVolta } : {}),
+      usarMilhas,
+    }
+    console.log("SUBMIT DESKTOP:", payload)
+    return payload
+  }
+
+  // Ao abrir origem: sempre começa em países
+  const openOrigem = () => {
+    setOpenField("origem")
+    setOrigemStep("country")
+    setSelectedCountry(null)
+  }
 
   return (
     <section className="hidden md:block bg-slate-50 pb-10">
       <div className="mx-auto max-w-7xl px-4">
-        <div className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-visible">
           <div className="p-7 lg:p-8">
             {/* Tabs topo */}
             <div className="flex items-center gap-4">
@@ -118,77 +314,218 @@ export default function SearchBoxDesktop() {
               </button>
             </div>
 
-            {/* ===== VOOS (print 1) ===== */}
+            {opt.error && (
+              <div className="mt-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-[14px] text-red-700">
+                {opt.error}
+              </div>
+            )}
+
+            {/* ===== VOOS ===== */}
             {tab === "voos" && (
               <>
                 <div className="mt-6 flex items-center gap-8">
-                  <Radio>Só ida</Radio>
-                  <Radio active>Ida e volta</Radio>
+                  <Radio active={tripType === "soIda"} onClick={() => setTripType("soIda")}>
+                    Só ida
+                  </Radio>
+                  <Radio active={tripType === "idaVolta"} onClick={() => setTripType("idaVolta")}>
+                    Ida e volta
+                  </Radio>
                 </div>
 
                 <div className="mt-5 grid grid-cols-12 gap-5 items-center">
-                  {/* Origem/Destino juntos (com divisor e swap) */}
+                  {/* Origem/Destino */}
                   <div className="col-span-12 lg:col-span-5">
-                    <div className="relative h-14 rounded-xl border border-slate-300 bg-white overflow-hidden flex">
-                      <div className="flex-1 flex items-center justify-between px-5 text-slate-300">
-                        <span className="text-[18px]">Origem</span>
-                        <svg className="h-5 w-5 opacity-40" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                    <div className="relative h-14 rounded-xl border border-slate-300 bg-white flex">
+                      {/* ORIGEM */}
+                      <div className="relative flex-1" ref={origemRootRef}>
+                        <input
+                          aria-label="Origem"
+                          type="text"
+                          value={origem}
+                          onChange={(e) => {
+                            setOrigem(e.target.value)
+                            setOpenField("origem")
+                          }}
+                          onFocus={openOrigem}
+                          onClick={openOrigem}
+                          placeholder={opt.loading ? "Carregando..." : "Origem"}
+                          disabled={opt.loading}
+                          autoComplete="off"
+                          className="h-14 w-full px-5 pr-10 text-[18px] text-[#1B2F5B] placeholder:text-slate-300 outline-none rounded-l-xl"
+                        />
+
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="h-5 w-5 opacity-70" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path
+                              d="M5 7.5L10 12.5L15 7.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+
+                        {openField === "origem" && !opt.loading && (
+                          <>
+                            {origemStep === "country" && (
+                              <SuggestList
+                                header="Selecione um país"
+                                items={origemCountrySuggestions}
+                                emptyText="Nenhum país encontrado"
+                                onPick={(c) => {
+                                  if (c.code === "BR") {
+                                    setSelectedCountry("BR")
+                                    setOrigemStep("city")
+                                    setOrigem("")
+                                    return
+                                  }
+                                  setOrigem(`${c.name} - ${c.code}`)
+                                  setOpenField(null)
+                                }}
+                              />
+                            )}
+
+                            {origemStep === "city" && (
+                              <SuggestList
+                                header="Brasil"
+                                onBack={() => {
+                                  setOrigemStep("country")
+                                  setSelectedCountry(null)
+                                  setOrigem("")
+                                }}
+                                items={origemCitySuggestions}
+                                emptyText="Nenhuma cidade encontrada"
+                                onPick={(city) => {
+                                  setOrigem(`${city.name} - ${city.code}`)
+                                  setOpenField(null)
+                                }}
+                              />
+                            )}
+                          </>
+                        )}
                       </div>
 
                       <div className="w-px bg-slate-300" />
 
-                      <div className="flex-1 flex items-center justify-between px-5 text-slate-300">
-                        <span className="text-[18px]">Destino</span>
-                        <svg className="h-5 w-5 opacity-40" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                      {/* DESTINO */}
+                      <div className="relative flex-1" ref={destinoRootRef}>
+                        <input
+                          aria-label="Destino"
+                          type="text"
+                          value={destino}
+                          onChange={(e) => {
+                            setDestino(e.target.value)
+                            setOpenField("destino")
+                          }}
+                          onFocus={() => setOpenField("destino")}
+                          onClick={() => setOpenField("destino")}
+                          placeholder={opt.loading ? "Carregando..." : "Destino"}
+                          disabled={opt.loading}
+                          autoComplete="off"
+                          className="h-14 w-full px-5 pr-10 text-[18px] text-[#1B2F5B] placeholder:text-slate-300 outline-none rounded-r-xl"
+                        />
+
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="h-5 w-5 opacity-70" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path
+                              d="M5 7.5L10 12.5L15 7.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+
+                        {openField === "destino" && !opt.loading && (
+                          <SuggestList
+                            header="Selecione um destino"
+                            items={destinoSuggestions}
+                            emptyText="Nenhum destino encontrado"
+                            onPick={(a) => {
+                              setDestino(`${a.code} - ${a.name}`)
+                              setOpenField(null)
+                            }}
+                          />
+                        )}
                       </div>
 
                       {/* círculo swap no meio */}
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 rounded-full border border-slate-300 bg-white grid place-items-center text-slate-300">
+                      <button
+                        type="button"
+                        onClick={swap}
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 rounded-full border border-slate-300 bg-white grid place-items-center text-slate-500 hover:bg-slate-50"
+                        aria-label="Trocar origem e destino"
+                      >
                         <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="M7 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M15 5l3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path
+                            d="M15 5l3 3-3 3"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                           <path d="M17 16H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M9 19l-3-3 3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path
+                            d="M9 19l-3-3 3-3"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                         </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Datas: Só ida = mostra só ida / Ida e volta = mostra ida + volta */}
+                  <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+                    <label className="block text-[#1B2F5B] text-[13px] mb-1">Data de ida</label>
+                    <div className="h-14 rounded-xl border border-slate-300 bg-white px-4 flex items-center justify-between">
+                      <input
+                        type="date"
+                        value={dataIda}
+                        onChange={(e) => setDataIda(e.target.value)}
+                        className="w-full text-[16px] text-[#1B2F5B] outline-none bg-transparent"
+                      />
+                      <IconCalendar className="opacity-40 shrink-0" />
+                    </div>
+                  </div>
+
+                  {tripType === "idaVolta" && (
+                    <div className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <label className="block text-[#1B2F5B] text-[13px] mb-1">Data de volta</label>
+                      <div className="h-14 rounded-xl border border-slate-300 bg-white px-4 flex items-center justify-between">
+                        <input
+                          type="date"
+                          value={dataVolta}
+                          onChange={(e) => setDataVolta(e.target.value)}
+                          min={dataIda || undefined}
+                          className="w-full text-[16px] text-[#1B2F5B] outline-none bg-transparent"
+                        />
+                        <IconCalendar className="opacity-40 shrink-0" />
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Datas */}
-                  <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-                    <div className="h-14 rounded-xl border border-slate-300 bg-white px-5 flex items-center justify-between text-slate-300">
-                      <span className="text-[18px]">Data de ida</span>
-                      <IconCalendar className="opacity-40" />
-                    </div>
-                  </div>
-
-                  <div className="col-span-12 sm:col-span-6 lg:col-span-2">
-                    <div className="h-14 rounded-xl border border-slate-300 bg-white px-5 flex items-center justify-between text-slate-300">
-                      <span className="text-[18px]">Data de volta</span>
-                      <IconCalendar className="opacity-40" />
-                    </div>
-                  </div>
-
-                  {/* Passageiros (borda azul) */}
+                  {/* Passageiros */}
                   <div className="col-span-12 lg:col-span-3">
                     <div className="h-14 rounded-xl border-2 border-[#1B2F5B] bg-white px-5 flex items-center justify-between text-[#1B2F5B]">
-                      <span className="text-[18px] font-medium">1 passageiro</span>
+                      <span className="text-[18px] font-medium">{opt.defaults.passageiros || 1} passageiro</span>
                       <IconUser className="opacity-40" />
                     </div>
                   </div>
                 </div>
 
                 {/* Checkbox */}
-                <div className="mt-6 flex items-center gap-4 text-[#1B2F5B]">
-                  <span className="h-4 w-4 rounded-sm border border-slate-400" />
+                <button type="button" onClick={() => setUsarMilhas((v) => !v)} className="mt-6 flex items-center gap-4 text-[#1B2F5B]">
+                  <span className={cn("h-4 w-4 rounded-sm border", usarMilhas ? "border-[#00A8C6] bg-[#00A8C6]" : "border-slate-400 bg-white")} />
                   <span className="text-[20px]">Usar milhas AAdvantage®</span>
-                </div>
+                </button>
 
-                {/* Rodapé: refazer + código + botão */}
+                {/* Rodapé */}
                 <div className="mt-10 flex items-center justify-between gap-6">
                   <button type="button" className="text-[#1B2F5B] font-semibold underline">
                     ↻ Refazer minha última busca
@@ -202,6 +539,7 @@ export default function SearchBoxDesktop() {
 
                     <button
                       type="button"
+                      onClick={submit}
                       className="h-14 px-8 rounded-full bg-[#D8A3A3] text-white text-[22px] font-medium inline-flex items-center gap-4"
                     >
                       Procurar SMART
@@ -216,7 +554,7 @@ export default function SearchBoxDesktop() {
               </>
             )}
 
-            {/* ===== HOTÉIS (print 2) ===== */}
+            {/* ===== HOTÉIS ===== */}
             {tab === "hoteis" && (
               <>
                 <h2 className="mt-7 text-[28px] font-semibold text-[#1B2F5B]">Encuentra el alojamiento perfecto</h2>
@@ -224,37 +562,31 @@ export default function SearchBoxDesktop() {
                 <div className="mt-8 grid grid-cols-12 gap-5 items-end">
                   <div className="col-span-12 lg:col-span-5">
                     <label className="block text-[#1B2F5B] text-[18px] mb-2">Destino</label>
-                    <div className="h-14 rounded-xl border border-slate-300 px-5 text-slate-300 flex items-center text-[18px]">
-                      Destino
-                    </div>
+                    <div className="h-14 rounded-xl border border-slate-300 px-5 text-slate-300 flex items-center text-[18px]">Destino</div>
                   </div>
 
                   <div className="col-span-12 sm:col-span-6 lg:col-span-2">
                     <label className="block text-[#1B2F5B] text-[18px] mb-2">Llegada</label>
-                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center justify-between text-[#1B2F5B] text-[18px]">
-                      11/01/2026 <IconCalendar className="opacity-70" />
+                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center justify-between text-slate-300 text-[18px]">
+                      Llegada <IconCalendar className="opacity-40" />
                     </div>
                   </div>
 
                   <div className="col-span-12 sm:col-span-6 lg:col-span-2">
                     <label className="block text-[#1B2F5B] text-[18px] mb-2">Salida</label>
-                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center justify-between text-[#1B2F5B] text-[18px]">
-                      12/01/2026 <IconCalendar className="opacity-70" />
+                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center justify-between text-slate-300 text-[18px]">
+                      Salida <IconCalendar className="opacity-40" />
                     </div>
                   </div>
 
                   <div className="col-span-12 sm:col-span-6 lg:col-span-1">
                     <label className="block text-[#1B2F5B] text-[18px] mb-2">Habitaciones</label>
-                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center text-[#1B2F5B] text-[18px]">
-                      1 Habitación
-                    </div>
+                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center text-slate-300 text-[18px]">Habitaciones</div>
                   </div>
 
                   <div className="col-span-12 sm:col-span-6 lg:col-span-2">
                     <label className="block text-[#1B2F5B] text-[18px] mb-2">Adultos</label>
-                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center text-[#1B2F5B] text-[18px]">
-                      1 Adulto
-                    </div>
+                    <div className="h-14 rounded-xl border border-slate-300 px-5 flex items-center text-slate-300 text-[18px]">Adultos</div>
                   </div>
                 </div>
 
@@ -263,10 +595,7 @@ export default function SearchBoxDesktop() {
                     Gestionado por <span className="font-bold text-[26px] text-[#003580]">Booking.com</span>
                   </div>
 
-                  <button
-                    type="button"
-                    className="h-14 px-10 rounded-full bg-[#B3262E] text-white text-[22px] font-medium inline-flex items-center gap-3"
-                  >
+                  <button type="button" className="h-14 px-10 rounded-full bg-[#B3262E] text-white text-[22px] font-medium inline-flex items-center gap-3">
                     Buscar <span aria-hidden>→</span>
                   </button>
                 </div>
